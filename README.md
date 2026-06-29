@@ -27,10 +27,16 @@ Setas ‹ › no topo trocam o mês.
 Preview do Claude Code: servidor `financas` na porta 8788 (em `.claude/launch.json`).
 
 ## Publicar (GitHub Pages)
-Este é um repositório git próprio. Para publicar:
-1. Criar um repositório novo no GitHub (ex.: `financas`).
-2. `git remote add origin <url-do-repo>` e `git push -u origin main`.
-3. Em Settings → Pages, apontar para a branch `main`.
-4. O app fica em `https://<seu-usuario>.github.io/financas/`.
+Repositório próprio no GitHub: **https://github.com/gencalmon/finance-tracker**
+App publicado (GitHub Pages): **https://gencalmon.github.io/finance-tracker/**
 
-Publicar mudanças depois: `git add -A && git commit -m "..." && git push`.
+Publicar mudanças depois de editar:
+
+```
+cd ~/Documents/Financas
+git add -A && git commit -m "descrição da mudança" && git push
+```
+
+Em 1–2 minutos o site atualiza. No celular, se o app já estiver instalado, abra 1–2 vezes online pra pegar a versão nova.
+
+Pra instalar no iPhone: abra o link no Safari → botão Compartilhar → "Adicionar à Tela de Início".
