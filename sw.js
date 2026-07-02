@@ -1,4 +1,4 @@
-const CACHE = 'financas-eliel-v1';
+const CACHE = 'financas-eliel-v2';
 const ASSETS = [
   './index.html',
   './manifest.json',

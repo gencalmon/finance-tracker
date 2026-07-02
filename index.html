@@ -209,6 +209,36 @@
   .prog>i.warn{background:var(--amber)}
   .prog>i.over{background:var(--rose)}
 
+  /* edit bar (modo editar) */
+  .editbar{display:flex;justify-content:flex-end;margin-bottom:12px}
+  .editbtn{background:var(--surface);border:1px solid var(--border-2);color:var(--dim);font-family:var(--font-d);font-weight:600;font-size:.8rem;padding:7px 13px;border-radius:9px;cursor:pointer;transition:.15s}
+  .editbtn:hover{color:var(--text);border-color:var(--jade)}
+  .editbtn.on{background:var(--jade-soft);color:var(--jade);border-color:var(--jade)}
+
+  /* assinaturas */
+  .sub{display:flex;align-items:center;gap:13px;padding:14px 4px;border-bottom:1px solid var(--border)}
+  .sub:last-of-type{border-bottom:0}
+  .sub-body{flex:1;min-width:0}
+  .sub-name{font-family:var(--font-d);font-weight:600;font-size:.96rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sub-meta{font-size:.76rem;color:var(--faint);margin-top:2px}
+  .sub-amt{font-family:var(--font-d);font-weight:700;font-size:.98rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .paybtn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-2);background:transparent;color:var(--dim);font-family:var(--font-b);font-weight:500;font-size:.8rem;padding:8px 13px;border-radius:10px;cursor:pointer;transition:.14s;flex-shrink:0}
+  .paybtn:hover{color:var(--text);border-color:var(--jade)}
+  .paybtn svg{width:15px;height:15px;stroke:currentColor;stroke-width:2.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .paybtn.on{background:var(--jade);border-color:var(--jade);color:#06231A;font-weight:600}
+
+  /* perfis */
+  .prof{display:flex;align-items:center;gap:13px;padding:14px 12px;border:1px solid var(--border);border-radius:13px;background:var(--surface);cursor:pointer;transition:.14s}
+  .prof+.prof,.prof+.editform,.editform+.prof{margin-top:9px}
+  .prof:not(.active):hover{border-color:var(--jade);background:var(--surface-2)}
+  .prof.active{border-color:var(--jade);background:var(--jade-soft);cursor:default}
+  .prof-radio{width:20px;height:20px;border-radius:50%;border:2px solid var(--border-2);flex-shrink:0;position:relative;transition:.14s}
+  .prof-radio.on{border-color:var(--jade)}
+  .prof-radio.on:after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--jade)}
+  .prof-body{flex:1;min-width:0}
+  .prof-name{font-family:var(--font-d);font-weight:600;font-size:.98rem}
+  .prof-meta{font-size:.78rem;color:var(--faint);margin-top:2px}
+
   .note{font-size:.8rem;color:var(--faint);line-height:1.6;margin-top:22px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:13px}
   .note b{color:var(--dim)}
   .savenote{font-size:.74rem;color:var(--faint);text-align:center;margin-top:24px;line-height:1.5}
@@ -276,9 +306,10 @@
     .chip{padding:11px}
     .chip .v{font-size:1.15rem}
     .chip .k{font-size:.68rem}
-    nav{gap:2px}
-    nav button{font-size:.76rem;padding:8px 3px}
+    nav{gap:3px;flex-wrap:wrap}
+    nav button{flex:1 1 30%;font-size:.76rem;padding:8px 3px}
     .frow{flex-direction:column}
+    .sub-amt{font-size:.9rem}
   }
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -295,8 +326,10 @@
   <nav>
     <button data-act="tab" data-tab="resumo" class="on">Resumo</button>
     <button data-act="tab" data-tab="lancar">Lançar</button>
+    <button data-act="tab" data-tab="assinaturas">Assinaturas</button>
     <button data-act="tab" data-tab="categorias">Categorias</button>
     <button data-act="tab" data-tab="relatorio">Relatório</button>
+    <button data-act="tab" data-tab="perfil">Perfil</button>
   </nav>
   <div id="app"><div class="loading">Carregando suas finanças…</div></div>
   <div class="savenote" id="saveNote"></div>
@@ -355,7 +388,7 @@ function handleAuth(user) {
     const firstLink = storeGet(SYNC_KEY) !== user.uid;
     userRef.once('value').then(snap => {
       const cloud = snap.val();
-      const sameAsLocal = cloud && cloud === JSON.stringify(state);
+      const sameAsLocal = cloud && cloud === JSON.stringify(store);
       if (firstLink && cloud && !sameAsLocal) {
         const useCloud = window.confirm(
           'A nuvem já tem finanças (de outro aparelho).\n\n' +
@@ -370,7 +403,7 @@ function handleAuth(user) {
       storeSet(SYNC_KEY, user.uid);
       userRef.on('value', s2 => {
         const remote = s2.val();
-        if (!remote || remote === JSON.stringify(state)) return;
+        if (!remote || remote === JSON.stringify(store)) return;
         applyRemote(parseCloud(remote));
       });
     }).catch(e => console.warn('sync once', e));
@@ -382,7 +415,7 @@ function parseCloud(v) { try { return typeof v === 'string' ? JSON.parse(v) : v;
 
 function applyRemote(remote) {
   if (!remote) return;
-  try { state = migrate(remote); } catch (e) { return; }
+  try { store = migrate(remote); bindActive(); } catch (e) { return; }
   saveLocalOnly();
   const f = document.activeElement;
   if (f && (f.tagName === 'TEXTAREA' || f.tagName === 'INPUT' || f.tagName === 'SELECT')) return;
@@ -395,7 +428,7 @@ function pushCloud() {
 }
 function pushCloudNow() {
   if (!currentUser || !userRef) return;
-  try { userRef.set(JSON.stringify(state)).catch(e => console.warn('sync set', e)); } catch (e) {}
+  try { userRef.set(JSON.stringify(store)).catch(e => console.warn('sync set', e)); } catch (e) {}
 }
 
 function renderSyncModal() {
@@ -460,11 +493,11 @@ function doSignup() {
   const auth = firebase.auth();
   auth.createUserWithEmailAndPassword(email, pwd).then(cred => {
     const user = cred.user;
-    state.userName = name;
+    store.userName = name;
     saveLocalOnly();
     return Promise.all([
       user.updateProfile({ displayName: name }).catch(() => {}),
-      firebase.database().ref('users/' + user.uid + '/' + DB_PATH).set(JSON.stringify(state)).catch(() => {}),
+      firebase.database().ref('users/' + user.uid + '/' + DB_PATH).set(JSON.stringify(store)).catch(() => {}),
       user.sendEmailVerification().catch(() => {})
     ]).then(() => auth.signOut());
   }).then(() => {
@@ -552,7 +585,7 @@ function toggleNotif() {
 /* ===== exportar / importar dados ===== */
 function exportData() {
   try {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = 'minhas-financas-backup-' + todayStr() + '.json';
@@ -567,7 +600,7 @@ function importData(file) {
     try { data = JSON.parse(reader.result); } catch (e) { window.alert('Arquivo inválido.'); return; }
     if (!data || typeof data !== 'object') { window.alert('Arquivo inválido.'); return; }
     if (!window.confirm('Importar esse backup vai SUBSTITUIR as finanças atuais deste aparelho. Continuar?')) return;
-    try { state = migrate(data); } catch (e) { window.alert('Não consegui ler esse backup.'); return; }
+    try { store = migrate(data); bindActive(); } catch (e) { window.alert('Não consegui ler esse backup.'); return; }
     save(); pushCloud(); closeSettings(); render();
     window.alert('Backup importado!');
   };
@@ -638,7 +671,7 @@ function renderSettings() {
       '<div class="set-row"><div class="set-lbl">Mostrar a meta no topo<small>A faixa com o seu objetivo financeiro, acima das abas.</small></div>' +
         '<button class="switch ' + (state.showNorthstar === false ? '' : 'on') + '" data-act="toggle-northstar" aria-label="Mostrar meta"><i></i></button></div>' +
       '<div class="set-lbl" style="margin-top:14px">Seu nome</div>' +
-      '<input type="text" id="setName" class="set-field" maxlength="40" value="' + esc(state.userName || '') + '" placeholder="Seu nome">' +
+      '<input type="text" id="setName" class="set-field" maxlength="40" value="' + esc(store.userName || '') + '" placeholder="Seu nome">' +
       '<div class="set-lbl" style="margin-top:12px">Meta / objetivo financeiro</div>' +
       '<textarea id="setNorte" class="set-field" maxlength="400" placeholder="Ex.: guardar R$ 500/mês, sair das dívidas, montar reserva…">' + esc(state.northstar || '') + '</textarea>' +
       '<div class="set-lbl" style="margin-top:12px">Orçamento de gastos por mês<small>Opcional. Aparece como barra de progresso no Resumo. Deixe 0 pra desligar.</small></div>' +
@@ -703,6 +736,8 @@ function ibtn(act, id, icon, title, extra) {
 
 const PALETTE = ['#15A574', '#2DA8A8', '#3D7DB0', '#8B5CF6', '#DB7093', '#D2544F', '#E0843B', '#C5841C', '#0E8A60', '#6B7280'];
 
+const CK = '<svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>';
+
 /* ===== defaults ===== */
 function defaultCategories() {
   return [
@@ -715,66 +750,112 @@ function defaultCategories() {
     { id: 'transporte', name: 'Transporte', type: 'out', color: '#3D7DB0', hidden: false },
     { id: 'saude', name: 'Saúde', type: 'out', color: '#2DA8A8', hidden: false },
     { id: 'educacao', name: 'Educação', type: 'out', color: '#8B5CF6', hidden: false },
+    { id: 'assinaturas', name: 'Assinaturas', type: 'out', color: '#7C5CFC', hidden: false },
     { id: 'lazer', name: 'Lazer', type: 'out', color: '#DB7093', hidden: false },
     { id: 'contas', name: 'Contas', type: 'out', color: '#E0843B', hidden: false },
     { id: 'outros_out', name: 'Outros gastos', type: 'out', color: '#6B7280', hidden: false }
   ];
 }
-function defaults() {
+function newProfileData() {
   return {
-    version: 1,
-    userName: 'Eliel',
     showNorthstar: true,
     northstar: 'gastar menos do que ganho todo mês e construir uma reserva de emergência.',
     monthlyBudget: 0,
     categories: defaultCategories(),
-    tx: []
+    tx: [],
+    subs: []
+  };
+}
+function defaults() {
+  return {
+    schema: 2,
+    userName: 'Eliel',
+    activeProfile: 'default',
+    profiles: [{ id: 'default', name: 'Pessoal', data: newProfileData() }]
   };
 }
 
-/* ===== state ===== */
+/* ===== state =====
+   store  = container sincronizado (conta + todos os perfis)
+   state  = atalho para os dados do perfil ativo (store.profiles[ativo].data) */
+let store = null;
 let state = null;
 let viewMonth = null;          // {y, m}
 let addType = 'out';           // tipo selecionado no formulário de lançamento
-let editing = null;            // { type:'tx'|'cat', id }
+let editing = null;            // { type:'tx'|'cat'|'sub'|'profile', id }
+let editSubs = false;          // modo edição da aba Assinaturas
 
-function migrate(s) {
-  if (!s || typeof s !== 'object') return defaults();
-  if (!s.version) s.version = 1;
-  if (typeof s.userName !== 'string' || !s.userName) s.userName = 'Eliel';
-  if (typeof s.showNorthstar !== 'boolean') s.showNorthstar = true;
-  if (typeof s.northstar !== 'string') s.northstar = defaults().northstar;
-  if (typeof s.monthlyBudget !== 'number' || isNaN(s.monthlyBudget)) s.monthlyBudget = 0;
-  s.categories = Array.isArray(s.categories) && s.categories.length ? s.categories : defaultCategories();
-  s.categories.forEach(c => {
+function migrateProfile(d) {
+  d = (d && typeof d === 'object') ? d : {};
+  if (typeof d.showNorthstar !== 'boolean') d.showNorthstar = true;
+  if (typeof d.northstar !== 'string') d.northstar = newProfileData().northstar;
+  if (typeof d.monthlyBudget !== 'number' || isNaN(d.monthlyBudget)) d.monthlyBudget = 0;
+  d.categories = Array.isArray(d.categories) && d.categories.length ? d.categories : defaultCategories();
+  d.categories.forEach(c => {
     if (c.type !== 'in' && c.type !== 'out') c.type = 'out';
     if (typeof c.color !== 'string') c.color = '#6B7280';
     if (typeof c.hidden !== 'boolean') c.hidden = false;
   });
-  s.tx = Array.isArray(s.tx) ? s.tx : [];
-  s.tx.forEach(t => {
+  d.tx = Array.isArray(d.tx) ? d.tx : [];
+  d.tx.forEach(t => {
     if (t.type !== 'in' && t.type !== 'out') t.type = 'out';
     t.amount = Math.round((Number(t.amount) || 0) * 100) / 100;
     if (typeof t.date !== 'string') t.date = todayStr();
     if (typeof t.note !== 'string') t.note = '';
   });
-  return s;
+  d.subs = Array.isArray(d.subs) ? d.subs : [];
+  d.subs.forEach(sb => {
+    if (typeof sb.name !== 'string') sb.name = 'Assinatura';
+    sb.amount = Math.round((Number(sb.amount) || 0) * 100) / 100;
+    sb.dueDay = Math.min(31, Math.max(1, parseInt(sb.dueDay) || 1));
+    if (typeof sb.active !== 'boolean') sb.active = true;
+  });
+  return d;
+}
+function migrate(raw) {
+  if (!raw || typeof raw !== 'object') return defaults();
+  // formato novo (container com perfis)
+  if (Array.isArray(raw.profiles)) {
+    const s = raw;
+    if (typeof s.userName !== 'string' || !s.userName) s.userName = 'Eliel';
+    s.profiles = s.profiles.filter(p => p && typeof p === 'object');
+    if (!s.profiles.length) s.profiles = defaults().profiles;
+    s.profiles.forEach(p => {
+      if (!p.id) p.id = 'p' + uid();
+      if (typeof p.name !== 'string' || !p.name) p.name = 'Perfil';
+      p.data = migrateProfile(p.data);
+    });
+    if (!s.profiles.find(p => p.id === s.activeProfile)) s.activeProfile = s.profiles[0].id;
+    s.schema = 2;
+    return s;
+  }
+  // formato antigo (estado plano) -> embrulha num perfil "Pessoal"
+  const userName = (typeof raw.userName === 'string' && raw.userName) ? raw.userName : 'Eliel';
+  return { schema: 2, userName: userName, activeProfile: 'default', profiles: [{ id: 'default', name: 'Pessoal', data: migrateProfile(raw) }] };
+}
+
+function activeProfileObj() { return store.profiles.find(p => p.id === store.activeProfile) || store.profiles[0]; }
+function bindActive() {
+  let p = store.profiles.find(p => p.id === store.activeProfile);
+  if (!p) { p = store.profiles[0]; store.activeProfile = p.id; }
+  state = p.data;
 }
 
 function load() {
   let raw = null;
   try { raw = storeGet(KEY); } catch (e) {}
-  if (raw) { try { state = migrate(JSON.parse(raw)); } catch (e) { state = defaults(); } }
-  if (!state) state = defaults();
+  if (raw) { try { store = migrate(JSON.parse(raw)); } catch (e) { store = defaults(); } }
+  else { store = defaults(); }
+  bindActive();
   const d = new Date();
   viewMonth = { y: d.getFullYear(), m: d.getMonth() };
 }
 
 let saveTimer = null;
-function saveLocalOnly() { storeSet(KEY, JSON.stringify(state)); }
+function saveLocalOnly() { storeSet(KEY, JSON.stringify(store)); }
 function save() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => storeSet(KEY, JSON.stringify(state)), 120);
+  saveTimer = setTimeout(() => storeSet(KEY, JSON.stringify(store)), 120);
   pushCloud();
 }
 
@@ -1031,14 +1112,99 @@ function renderCatBreakdownPeriod(list, type, title) {
   return '<div class="card"><div class="sect-h">' + title + '</div><div class="sect-p">Total gasto: ' + money(total) + '</div>' + inner + '</div>';
 }
 
+/* ===== render: Assinaturas / contas fixas ===== */
+function subPaidTx(sb) { const mk = monthKey(viewMonth.y, viewMonth.m); return state.tx.filter(t => t.subId === sb.id && t.date.slice(0, 7) === mk); }
+function subIsPaid(sb) { return subPaidTx(sb).length > 0; }
+function renderAssinaturas() {
+  const editBar = '<div class="editbar"><button class="editbtn ' + (editSubs ? 'on' : '') + '" data-act="toggle-edit-subs">' + (editSubs ? '✓ Concluir' : '✎ Editar') + '</button></div>';
+  const active = state.subs.filter(s => s.active);
+  const paused = state.subs.filter(s => !s.active);
+  const totalMensal = active.reduce((s, x) => s + x.amount, 0);
+  const pago = active.filter(subIsPaid).reduce((s, x) => s + x.amount, 0);
+  const pend = totalMensal - pago;
+
+  const chips = '<div class="stats">' +
+    '<div class="chip"><div class="v">' + money(totalMensal) + '</div><div class="k">compromisso mensal</div></div>' +
+    '<div class="chip"><div class="v pos">' + money(pago) + '</div><div class="k">pago em ' + esc(monthShort(viewMonth.y, viewMonth.m)) + '</div></div>' +
+    '<div class="chip"><div class="v neg">' + money(pend) + '</div><div class="k">ainda a pagar</div></div></div>';
+
+  const sorted = active.slice().sort((a, b) => a.dueDay - b.dueDay);
+  let rows = sorted.map(renderSubRow).join('');
+  if (!rows) rows = '<div class="empty">Nenhuma assinatura ativa. Toque em Editar e adicione (ex.: Netflix, aluguel, academia).</div>';
+
+  let pausedHtml = '';
+  if (paused.length) pausedHtml = '<div class="seclab"><span class="t">Pausadas</span><span class="s">não entram no total</span></div>' + paused.map(renderSubRow).join('');
+
+  const addForm = editSubs ? renderSubAddForm() : '';
+  const listCard = '<div class="card"><div class="sect-h">Assinaturas e contas fixas</div>' +
+    '<div class="sect-p">' + esc(monthLabel(viewMonth.y, viewMonth.m)) + ' · marque o que já pagou. Ao marcar, vira uma saída no seu mês automaticamente.</div>' +
+    rows + pausedHtml + addForm + '</div>';
+
+  return editBar + chips + listCard +
+    '<div class="note"><b>Como funciona:</b> cadastre aqui o que se repete todo mês. Marcar como <b>pago</b> lança a saída no mês que está selecionado no topo (‹ ›) — desmarcar remove. Pra pausar algo sem apagar o histórico, use Editar → pausar.</div>';
+}
+function renderSubRow(sb) {
+  if (editing && editing.type === 'sub' && editing.id === sb.id) {
+    return '<div class="editform">' +
+      '<label class="flbl">Nome</label><input id="editSubName" class="field" type="text" value="' + esc(sb.name) + '" maxlength="40">' +
+      '<label class="flbl">Valor</label><input id="editSubAmount" class="field money" type="text" inputmode="decimal" value="' + money(sb.amount) + '">' +
+      '<label class="flbl">Categoria</label><select id="editSubCat" class="field">' + catOptions('out', sb.cat) + '</select>' +
+      '<label class="flbl">Dia do vencimento</label><input id="editSubDue" class="field" type="number" min="1" max="31" value="' + sb.dueDay + '">' +
+      '<div class="ef-actions"><button class="btn" data-act="save-sub" data-id="' + sb.id + '">Salvar</button><button class="btn ghost" data-act="cancel-edit">Cancelar</button></div></div>';
+  }
+  const paid = sb.active && subIsPaid(sb);
+  const meta = 'vence dia ' + sb.dueDay + ' · ' + esc(catName(sb.cat));
+  const right = editSubs
+    ? '<div class="ctrls">' + ibtn('edit-sub', sb.id, IC.pencil, 'Editar') + ibtn('pause-sub', sb.id, sb.active ? IC.eyeoff : IC.eye, sb.active ? 'Pausar' : 'Reativar') + ibtn('del-sub', sb.id, IC.trash, 'Excluir', 'danger') + '</div>'
+    : (sb.active ? '<button class="paybtn ' + (paid ? 'on' : '') + '" data-act="toggle-pay" data-id="' + sb.id + '">' + CK + '<span>' + (paid ? 'Pago' : 'Pagar') + '</span></button>' : '<span class="htag">pausada</span>');
+  return '<div class="sub ' + (sb.active ? '' : 'is-hidden') + '">' +
+    '<div class="sub-body"><div class="sub-name">' + esc(sb.name) + '</div><div class="sub-meta">' + meta + '</div></div>' +
+    '<div class="sub-amt">' + money(sb.amount) + '</div>' + right + '</div>';
+}
+function renderSubAddForm() {
+  return '<div class="addform"><div class="af-title">Nova assinatura / conta fixa</div><div class="form-grid">' +
+    '<input id="newSubName" class="field" type="text" placeholder="Nome (ex.: Netflix, Aluguel, Academia)" maxlength="40" autocomplete="off">' +
+    '<div class="frow"><input id="newSubAmount" class="field money" type="text" inputmode="decimal" placeholder="R$ 0,00"><input id="newSubDue" class="field" type="number" min="1" max="31" placeholder="Dia (1-31)"></div>' +
+    '<select id="newSubCat" class="field">' + catOptions('out', 'assinaturas') + '</select>' +
+    '<button class="btn" data-act="add-sub">Adicionar</button></div></div>';
+}
+
+/* ===== render: Perfil ===== */
+function renderPerfil() {
+  const acct = currentUser ? ('sincronizado como ' + esc(currentUser.email)) : (fbReady ? 'não sincronizado neste aparelho — ative a sincronização no topo pra levar os perfis a outros aparelhos' : 'offline');
+  const rows = store.profiles.map(p => {
+    if (editing && editing.type === 'profile' && editing.id === p.id) {
+      return '<div class="editform">' +
+        '<label class="flbl">Nome do perfil</label><input id="editProfileName" class="field" type="text" value="' + esc(p.name) + '" maxlength="30">' +
+        '<div class="ef-actions"><button class="btn" data-act="save-profile" data-id="' + p.id + '">Salvar</button><button class="btn ghost" data-act="cancel-edit">Cancelar</button></div></div>';
+    }
+    const isActive = p.id === store.activeProfile;
+    const count = (p.data.tx || []).length;
+    const saldo = totalsOf(p.data.tx || []).saldo;
+    const ctrls = '<div class="ctrls">' + ibtn('edit-profile', p.id, IC.pencil, 'Renomear') + (store.profiles.length > 1 ? ibtn('del-profile', p.id, IC.trash, 'Excluir', 'danger') : '') + '</div>';
+    return '<div class="prof ' + (isActive ? 'active' : '') + '"' + (isActive ? '' : ' data-act="switch-profile" data-id="' + p.id + '"') + '>' +
+      '<div class="prof-radio ' + (isActive ? 'on' : '') + '"></div>' +
+      '<div class="prof-body"><div class="prof-name">' + esc(p.name) + (isActive ? ' <span class="htag">ativo</span>' : '') + '</div>' +
+      '<div class="prof-meta">' + count + ' lançamento' + (count === 1 ? '' : 's') + ' · saldo ' + moneySigned(saldo) + '</div></div>' + ctrls + '</div>';
+  }).join('');
+  const addForm = '<div class="addform"><div class="af-title">Novo perfil</div><div class="form-grid">' +
+    '<input id="newProfileName" class="field" type="text" placeholder="Nome (ex.: Empresa, Casa, Viagem)" maxlength="30" autocomplete="off">' +
+    '<button class="btn" data-act="add-profile">Criar perfil</button></div></div>';
+  return '<div class="card"><div class="sect-h">Perfis</div>' +
+    '<div class="sect-p">Cada perfil tem lançamentos, categorias e assinaturas próprios — mas todos ficam na mesma conta e sincronizam juntos (' + acct + ').</div>' +
+    rows + addForm + '</div>' +
+    '<div class="note"><b>Como usar:</b> toque num perfil pra trocar. Serve pra separar, por exemplo, suas contas pessoais das da faculdade ou de um negócio. A conta de login e a sincronização são as mesmas pra todos os perfis.</div>';
+}
+
 /* ===== render ===== */
 let currentTab = 'resumo';
 function setTab(t) {
   currentTab = t;
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
 }
+function brandText() { const pn = activeProfileObj().name; return (store.userName ? store.userName + ' — ' : '') + pn; }
 function render() {
-  document.getElementById('brandTitle').textContent = (state.userName ? state.userName + ' — ' : '') + 'Finanças';
+  document.getElementById('brandTitle').textContent = brandText();
   document.getElementById('today').innerHTML = renderMonthNav();
   const nsEl = document.getElementById('northstar');
   if (state.showNorthstar === false) { nsEl.style.display = 'none'; }
@@ -1046,8 +1212,10 @@ function render() {
   root.innerHTML =
     '<div class="panel ' + (currentTab === 'resumo' ? 'on' : '') + '">' + renderResumo() + '</div>' +
     '<div class="panel ' + (currentTab === 'lancar' ? 'on' : '') + '">' + renderLancar() + '</div>' +
+    '<div class="panel ' + (currentTab === 'assinaturas' ? 'on' : '') + '">' + renderAssinaturas() + '</div>' +
     '<div class="panel ' + (currentTab === 'categorias' ? 'on' : '') + '">' + renderCategorias() + '</div>' +
-    '<div class="panel ' + (currentTab === 'relatorio' ? 'on' : '') + '">' + renderRelatorio() + '</div>';
+    '<div class="panel ' + (currentTab === 'relatorio' ? 'on' : '') + '">' + renderRelatorio() + '</div>' +
+    '<div class="panel ' + (currentTab === 'perfil' ? 'on' : '') + '">' + renderPerfil() + '</div>';
 }
 
 /* ===== helpers ===== */
@@ -1074,6 +1242,27 @@ function doAddCat(type) {
   if (!name) { refocus('newCatName_' + type); return; }
   state.categories.push({ id: 'c' + uid(), name, type, color, hidden: false });
   save(); render(); refocus('newCatName_' + type);
+}
+function doAddSub() {
+  const name = val('newSubName').trim();
+  const amount = parseMoney(val('newSubAmount'));
+  const cat = val('newSubCat');
+  let due = parseInt(val('newSubDue')) || 1; due = Math.min(31, Math.max(1, due));
+  if (!name) { window.alert('Dê um nome pra assinatura (ex.: Netflix).'); refocus('newSubName'); return; }
+  if (isNaN(amount) || amount <= 0) { window.alert('Digite um valor mensal maior que zero.'); refocus('newSubAmount'); return; }
+  if (!cat) { window.alert('Escolha uma categoria (crie uma na aba Categorias se não tiver).'); return; }
+  state.subs.push({ id: 's' + uid(), name, amount, cat, dueDay: due, active: true });
+  save(); render(); refocus('newSubName');
+}
+function doAddProfile() {
+  const name = val('newProfileName').trim() || 'Novo perfil';
+  const p = { id: 'p' + uid(), name, data: newProfileData() };
+  store.profiles.push(p);
+  store.activeProfile = p.id;
+  bindActive();
+  editing = null;
+  const d = new Date(); viewMonth = { y: d.getFullYear(), m: d.getMonth() };
+  save(); render();
 }
 
 /* ===== events ===== */
@@ -1163,6 +1352,61 @@ document.addEventListener('click', e => {
     if (!window.confirm(msg)) return;
     state.categories = state.categories.filter(c => c.id !== id); save(); render(); return;
   }
+
+  /* assinaturas / contas fixas */
+  if (act === 'toggle-edit-subs') { editSubs = !editSubs; editing = null; render(); return; }
+  if (act === 'add-sub') { doAddSub(); return; }
+  if (act === 'edit-sub') { editing = { type: 'sub', id }; render(); return; }
+  if (act === 'save-sub') {
+    const sb = state.subs.find(x => x.id === id);
+    if (sb) {
+      const amount = parseMoney(val('editSubAmount'));
+      if (isNaN(amount) || amount <= 0) { window.alert('Digite um valor maior que zero.'); return; }
+      sb.name = val('editSubName').trim() || sb.name;
+      sb.amount = amount;
+      const cat = val('editSubCat'); if (cat) sb.cat = cat;
+      let due = parseInt(val('editSubDue')) || sb.dueDay; sb.dueDay = Math.min(31, Math.max(1, due));
+    }
+    editing = null; save(); render(); return;
+  }
+  if (act === 'pause-sub') { const sb = state.subs.find(x => x.id === id); if (sb) sb.active = !sb.active; save(); render(); return; }
+  if (act === 'del-sub') { if (!window.confirm('Excluir esta assinatura? Os pagamentos que você já marcou continuam como lançamentos.')) return; state.subs = state.subs.filter(x => x.id !== id); save(); render(); return; }
+  if (act === 'toggle-pay') {
+    const sb = state.subs.find(x => x.id === id);
+    if (sb) {
+      const mk = monthKey(viewMonth.y, viewMonth.m);
+      const existing = subPaidTx(sb);
+      if (existing.length) {
+        state.tx = state.tx.filter(t => !(t.subId === sb.id && t.date.slice(0, 7) === mk));
+      } else {
+        const last = new Date(viewMonth.y, viewMonth.m + 1, 0).getDate();
+        const day = Math.min(sb.dueDay, last);
+        state.tx.push({ id: uid(), type: 'out', amount: sb.amount, cat: sb.cat, note: sb.name, date: mk + '-' + pad(day), subId: sb.id });
+      }
+      save(); render();
+    }
+    return;
+  }
+
+  /* perfis */
+  if (act === 'switch-profile') {
+    if (id === store.activeProfile) return;
+    save();
+    store.activeProfile = id; bindActive(); editing = null;
+    const d = new Date(); viewMonth = { y: d.getFullYear(), m: d.getMonth() };
+    setTab('resumo'); save(); render(); window.scrollTo(0, 0); return;
+  }
+  if (act === 'add-profile') { doAddProfile(); return; }
+  if (act === 'edit-profile') { editing = { type: 'profile', id }; render(); return; }
+  if (act === 'save-profile') { const p = store.profiles.find(x => x.id === id); if (p) p.name = val('editProfileName').trim() || p.name; editing = null; save(); render(); return; }
+  if (act === 'del-profile') {
+    if (store.profiles.length <= 1) { window.alert('Você precisa de pelo menos um perfil.'); return; }
+    const p = store.profiles.find(x => x.id === id);
+    if (!p || !window.confirm('Excluir o perfil "' + p.name + '" e TODAS as finanças dele? Não dá pra desfazer.')) return;
+    store.profiles = store.profiles.filter(x => x.id !== id);
+    if (store.activeProfile === id) store.activeProfile = store.profiles[0].id;
+    bindActive(); editing = null; save(); render(); return;
+  }
 });
 
 document.addEventListener('change', e => {
@@ -1173,7 +1417,7 @@ document.addEventListener('change', e => {
 
 document.addEventListener('input', e => {
   const el = e.target;
-  if (el.id === 'setName') { state.userName = el.value; document.getElementById('brandTitle').textContent = (el.value ? el.value + ' — ' : '') + 'Finanças'; save(); }
+  if (el.id === 'setName') { store.userName = el.value; document.getElementById('brandTitle').textContent = brandText(); save(); }
   else if (el.id === 'setNorte') { state.northstar = el.value; const ns = document.getElementById('northstar'); if (state.showNorthstar !== false) ns.innerHTML = renderNorthstar(); save(); }
 });
 
@@ -1183,6 +1427,8 @@ document.addEventListener('keydown', e => {
   if (id === 'txAmount' || id === 'txNote') { e.preventDefault(); doAddTx(); }
   else if (id === 'newCatName_in') { e.preventDefault(); doAddCat('in'); }
   else if (id === 'newCatName_out') { e.preventDefault(); doAddCat('out'); }
+  else if (id === 'newSubName' || id === 'newSubAmount' || id === 'newSubDue') { e.preventDefault(); doAddSub(); }
+  else if (id === 'newProfileName') { e.preventDefault(); doAddProfile(); }
   else if (id === 'setBudget') { e.preventDefault(); el2budget(); e.target.blur(); }
   else if (id === 'syncEmail' || id === 'syncPwd' || id === 'suName') { e.preventDefault(); syncMode === 'signup' ? doSignup() : doLogin(); }
 });
